@@ -1,3 +1,3 @@
 # proofpulse
-A Bifrost freshness-verification plugin powered by Tavily
+A Bifrost freshness-verification plugin powered by Tavily.
 
