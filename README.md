@@ -3,6 +3,7 @@
   <h1>ProofPulse</h1>
   <p><strong>Catch stale claims before they reach your users.</strong></p>
   <p>A Go freshness service and Bifrost plugin, powered by Tavily.</p>
+  <p><strong>Tavily research is included—customers do not need their own Tavily API key.</strong></p>
   <p>
     <a href="https://proofpulse-cy4nsmwp.manus.space">Concept site</a>
     &nbsp;·&nbsp;
@@ -20,7 +21,7 @@
 
 ProofPulse checks time-sensitive claims in AI answers against live web evidence. It is built as a small Go service with a custom Bifrost plugin: Bifrost handles model calls, Tavily searches for current sources, and ProofPulse returns claim-level signals and source links.
 
-> **Hackathon prototype:** results depend on available sources and model assessment. Treat the verdict as evidence to review, not a guarantee of truth.
+> **Hackathon prototype:** results depend on available sources and model assessment. Treat the verdict as evidence to review, not a guarantee of truth. For local or self-hosted runs, the service operator configures the Tavily key server-side; customers do not enter it.
 
 ## What it does
 
@@ -58,7 +59,7 @@ The service exposes a small HTTP API:
 
 - Go 1.22 or later for the ProofPulse service
 - A running Bifrost gateway with a model provider and model configured
-- A Tavily API key for live web checks
+- A Tavily API key for the local service deployment, configured server-side by its operator
 
 ### Run the service
 
@@ -68,7 +69,7 @@ cd proofpulse
 cp .env.example .env
 ```
 
-Add your Tavily key to `.env`. Set `BIFROST_MODEL` to a model available in your Bifrost configuration, then start ProofPulse:
+For this prototype, the service operator sets the Tavily key in `.env`; it stays on the server and is not a customer-facing setting. Set `BIFROST_MODEL` to a model available in your Bifrost configuration, then start ProofPulse:
 
 ```bash
 go run ./cmd/proofpulse
@@ -90,7 +91,7 @@ go build -o proofpulse ./cmd/proofpulse
 | `BIFROST_BASE_URL` | `http://localhost:8080/v1` | Bifrost OpenAI-compatible API |
 | `BIFROST_API_KEY` | `local-development` | Key accepted by your local Bifrost gateway, if configured |
 | `BIFROST_MODEL` | `openrouter/free` | Model name configured in Bifrost |
-| `TAVILY_API_KEY` | — | Tavily key; required for live verification |
+| `TAVILY_API_KEY` | — | Server-side Tavily credential for this deployment; not a customer-facing setting |
 
 ## Build the Bifrost plugin
 
