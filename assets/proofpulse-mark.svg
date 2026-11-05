@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">ProofPulse</title>
+  <desc id="desc">A mint pulse line with a white signal dot, framed by violet arcs on a dark navy tile.</desc>
+  <rect width="256" height="256" rx="52" fill="#0B1829"/>
+  <path d="M53 84C72 57 100 40 128 40s56 17 75 44M53 172c19 27 47 44 75 44s56-17 75-44" fill="none" stroke="#8B6DDA" stroke-width="8" stroke-linecap="round"/>
+  <path d="M41 128h50l17-39 22 77 18-45h67" fill="none" stroke="#54E0BE" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="128" cy="128" r="15" fill="#F7F8FC"/>
+</svg>
