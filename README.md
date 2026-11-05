@@ -1,52 +1,102 @@
-# ProofPulse
+<div align="center">
+  <img src="assets/proofpulse-mark.svg" alt="ProofPulse logo" width="96" height="96">
+  <h1>ProofPulse</h1>
+  <p><strong>Catch stale claims before they reach your users.</strong></p>
+  <p>A Go freshness service and Bifrost plugin, powered by Tavily.</p>
+  <p>
+    <a href="https://proofpulse-cy4nsmwp.manus.space">Concept site</a>
+    &nbsp;·&nbsp;
+    <a href="#how-it-works">How it works</a>
+    &nbsp;·&nbsp;
+    <a href="#quick-start">Quick start</a>
+  </p>
+  <p>
+    <a href="https://github.com/Tanishq-lab-Genius/proofpulse/actions/workflows/go-build.yml"><img src="https://github.com/Tanishq-lab-Genius/proofpulse/actions/workflows/go-build.yml/badge.svg?branch=main" alt="Go build"></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-54E0BE.svg" alt="MIT license"></a>
+  </p>
+</div>
 
-ProofPulse is a Go freshness layer for Bifrost, powered by Tavily. The Go service checks up to three time-sensitive claims against live web evidence and returns claim verdicts, source links, and a corrected answer when the evidence supports one. A separate Bifrost HTTP plugin applies that verification to eligible gateway chat-completion responses.
+---
 
-## Run locally
+ProofPulse checks time-sensitive claims in AI answers against live web evidence. It is built as a small Go service with a custom Bifrost plugin: Bifrost handles model calls, Tavily searches for current sources, and ProofPulse returns claim-level signals and source links.
 
-Requirements: Go 1.22 or later for the ProofPulse service, a running Bifrost gateway with a model provider configured, and a Tavily API key.
+> **Hackathon prototype:** results depend on available sources and model assessment. Treat the verdict as evidence to review, not a guarantee of truth.
 
-1. Copy `.env.example` to `.env` and set `TAVILY_API_KEY`. Keep `.env` private.
-2. Confirm Bifrost is running at `http://localhost:8080/v1`. The defaults use the `openrouter/free` model; set `BIFROST_MODEL` to a model configured in your Bifrost instance.
-3. Start ProofPulse:
+## What it does
 
-   ```bash
-   go run ./cmd/proofpulse
-   ```
+- Finds up to three claims likely to change, such as prices, versions, policies, dates, or availability.
+- Searches Tavily for current evidence and returns a verdict and source links for each claim.
+- Preserves the original answer when a lookup or assessment is uncertain.
+- Adds the review context to eligible buffered Bifrost chat-completion responses.
+- Fails open: if ProofPulse is unavailable, the original model response continues unchanged.
 
-4. Open <http://localhost:8000>.
+## How it works
 
-Build a standalone server binary with:
+```mermaid
+flowchart LR
+    App[Your app] -->|chat request| Bifrost[Bifrost gateway]
+    Bifrost -->|model response| Plugin[ProofPulse plugin]
+    Plugin -->|question and answer| API[ProofPulse Go service]
+    API -->|claim analysis| Bifrost
+    API -->|live source search| Tavily[Tavily]
+    Tavily --> API
+    Bifrost --> API
+    API -->|verdicts and sources| Plugin
+    Plugin -->|annotated response| App
+```
+
+The service exposes a small HTTP API:
+
+| Route | Purpose |
+| --- | --- |
+| `GET /health` | Check that the service is running |
+| `POST /api/verify` | Generate or check an answer and return claim verdicts |
+
+## Quick start
+
+### Requirements
+
+- Go 1.22 or later for the ProofPulse service
+- A running Bifrost gateway with a model provider and model configured
+- A Tavily API key for live web checks
+
+### Run the service
+
+```bash
+git clone https://github.com/Tanishq-lab-Genius/proofpulse.git
+cd proofpulse
+cp .env.example .env
+```
+
+Add your Tavily key to `.env`. Set `BIFROST_MODEL` to a model available in your Bifrost configuration, then start ProofPulse:
+
+```bash
+go run ./cmd/proofpulse
+```
+
+Open [http://localhost:8000](http://localhost:8000).
+
+Keep `.env` private; never commit API keys. Build a standalone service binary with:
 
 ```bash
 go build -o proofpulse ./cmd/proofpulse
 ```
 
-## Configuration
+### Configuration
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `ADDR` | `:8000` | HTTP listen address |
-| `BIFROST_BASE_URL` | `http://localhost:8080/v1` | Bifrost OpenAI-compatible API base URL |
-| `BIFROST_API_KEY` | `local-development` | Key accepted by the local Bifrost gateway, if configured |
+| `BIFROST_BASE_URL` | `http://localhost:8080/v1` | Bifrost OpenAI-compatible API |
+| `BIFROST_API_KEY` | `local-development` | Key accepted by your local Bifrost gateway, if configured |
 | `BIFROST_MODEL` | `openrouter/free` | Model name configured in Bifrost |
-| `TAVILY_API_KEY` | — | Tavily search key; required for live verification |
+| `TAVILY_API_KEY` | — | Tavily key; required for live verification |
 
-## Request flow
+## Build the Bifrost plugin
 
-```text
-Bifrost chat completion → ProofPulse plugin → ProofPulse Go API
-                        → Bifrost claim analysis → Tavily evidence → verdicts/citations
-                        → verified chat completion
-```
+The plugin lives in `bifrost-plugin/`. It currently handles buffered `/chat/completions` responses; streaming responses pass through without a freshness check.
 
-The API is `POST /api/verify` with JSON `{ "question": "...", "answer": "optional existing answer" }`. `GET /health` is a lightweight health check. The web page is embedded into the Go binary. The service marks up to three important time-sensitive claims for verification to keep latency bounded.
-
-## Build and configure the Bifrost plugin
-
-The plugin in `bifrost-plugin/` intercepts buffered `/chat/completions` responses, sends the user's text and model answer to the ProofPulse service, and adds the verified answer with evidence links. It skips streaming calls and internal ProofPulse model calls. If the service is unavailable, Bifrost returns its original answer unchanged.
-
-Build the shared object with the same Go version used to build your Bifrost gateway (the module currently pins Bifrost core `v1.13.1` and Go `1.27.3`):
+Build it with the same Go version, operating system, and architecture as your Bifrost gateway:
 
 ```bash
 cd bifrost-plugin
@@ -55,7 +105,9 @@ mkdir -p build
 go build -buildmode=plugin -o build/proofpulse.so .
 ```
 
-Enable the `.so` as a custom plugin in Bifrost and set its config to the ProofPulse service URL. For Bifrost running in Docker on macOS, the service URL is typically `http://host.docker.internal:8000`; for a native Bifrost process, use `http://127.0.0.1:8000`.
+Bifrost must be built with dynamic plugin support enabled. Go plugins also need to match the gateway's Go version and platform. See the [Bifrost plugin guide](https://github.com/maximhq/bifrost/blob/dev/docs/plugins/getting-started.mdx) and [dynamic-build instructions](https://github.com/maximhq/bifrost/blob/dev/docs/plugins/building-dynamic-binary.mdx).
+
+Configure the plugin with the URL the gateway can use to reach ProofPulse. For Bifrost in Docker on macOS, that is commonly `http://host.docker.internal:8000`; for a native Bifrost process, use `http://127.0.0.1:8000`.
 
 ```yaml
 bifrost:
@@ -69,8 +121,12 @@ bifrost:
           timeout_seconds: 180
 ```
 
-The plugin must match Bifrost's Go version, OS, and architecture, and Bifrost must use a dynamic build that enables `.so` loading. Follow the [official dynamic-build guide](https://github.com/maximhq/bifrost/blob/dev/docs/plugins/building-dynamic-binary.mdx) for the gateway setup. Current Go plugins support Linux and macOS. Streaming chat responses are passed through without freshness checks in this first version.
+## Current scope
 
-## Verification behavior
+- Up to three time-sensitive claims are checked per answer to bound the work.
+- Streaming chat responses are not checked in this first version.
+- The concept site contains a simulated browser demo; live verification runs through the Go service.
 
-ProofPulse marks a claim stale only when the evidence clearly contradicts it. An unavailable search or an unclear model verdict is reported as uncertain, and the original answer is preserved unless a specific correction is supported by the evidence.
+## License
+
+ProofPulse is released under the [MIT License](LICENSE).
