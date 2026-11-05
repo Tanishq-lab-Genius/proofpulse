@@ -44,9 +44,11 @@ type verifyRequest struct {
 
 type verifyResponse struct {
 	VerifiedAnswer string `json:"verified_answer"`
+	ClaimsChecked  int    `json:"claims_checked"`
 	Verifications  []struct {
-		Claim   string `json:"claim"`
-		Status  string `json:"status"`
+		Claim       string `json:"claim"`
+		Status      string `json:"status"`
+		Explanation string `json:"explanation"`
 		Sources []struct {
 			Title string `json:"title"`
 			URL   string `json:"url"`
@@ -120,6 +122,10 @@ func HTTPTransportPostHook(_ *schemas.BifrostContext, req *schemas.HTTPRequest, 
 		setStatus(resp, "unavailable")
 		return nil
 	}
+	if result.ClaimsChecked == 0 {
+		setStatus(resp, "no-claims")
+		return nil
+	}
 	if strings.TrimSpace(result.VerifiedAnswer) == "" {
 		setStatus(resp, "unchanged")
 		return nil
@@ -131,7 +137,7 @@ func HTTPTransportPostHook(_ *schemas.BifrostContext, req *schemas.HTTPRequest, 
 		return nil
 	}
 	resp.Body = updatedBody
-	setStatus(resp, "verified")
+	setStatus(resp, "checked")
 	return nil
 }
 
@@ -270,8 +276,9 @@ func replaceCompletionContent(body []byte, content string) ([]byte, error) {
 }
 
 func appendCitations(answer string, verifications []struct {
-	Claim   string `json:"claim"`
-	Status  string `json:"status"`
+	Claim       string `json:"claim"`
+	Status      string `json:"status"`
+	Explanation string `json:"explanation"`
 	Sources []struct {
 		Title string `json:"title"`
 		URL   string `json:"url"`
@@ -279,14 +286,14 @@ func appendCitations(answer string, verifications []struct {
 }) string {
 	var lines []string
 	for _, item := range verifications {
-		if len(item.Sources) == 0 {
-			continue
-		}
 		claim := strings.TrimSpace(item.Claim)
 		if claim == "" {
 			claim = "Checked claim"
 		}
-		line := fmt.Sprintf("- **%s:** %s", item.Status, claim)
+		line := fmt.Sprintf("- **%s:** %s", item.Status, markdownText(claim))
+		if explanation := strings.TrimSpace(item.Explanation); explanation != "" {
+			line += " — " + markdownText(explanation)
+		}
 		for _, source := range item.Sources {
 			parsed, err := url.Parse(source.URL)
 			if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
@@ -296,7 +303,8 @@ func appendCitations(answer string, verifications []struct {
 			if title == "" {
 				title = "Source"
 			}
-			line += fmt.Sprintf(" [%s](%s)", title, parsed.String())
+			safeURL := strings.NewReplacer("<", "%3C", ">", "%3E").Replace(parsed.String())
+			line += fmt.Sprintf(" [%s](<%s>)", markdownText(title), safeURL)
 		}
 		lines = append(lines, line)
 	}
@@ -306,9 +314,25 @@ func appendCitations(answer string, verifications []struct {
 	return strings.TrimSpace(answer) + "\n\n**ProofPulse freshness check**\n" + strings.Join(lines, "\n")
 }
 
+func markdownText(value string) string {
+	value = strings.ReplaceAll(value, "\r", " ")
+	value = strings.ReplaceAll(value, "\n", " ")
+	return strings.NewReplacer(
+		"\\", "\\\\", "`", "\\`", "*", "\\*", "_", "\\_",
+		"{", "\\{", "}", "\\}", "[", "\\[", "]", "\\]",
+		"(", "\\(", ")", "\\)", "#", "\\#", "+", "\\+",
+		"-", "\\-", ".", "\\.", "!", "\\!", "|", "\\|",
+	).Replace(value)
+}
+
 func setStatus(resp *schemas.HTTPResponse, status string) {
 	if resp.Headers == nil {
 		resp.Headers = make(map[string]string)
+	}
+	for key := range resp.Headers {
+		if strings.EqualFold(key, "X-ProofPulse-Status") {
+			delete(resp.Headers, key)
+		}
 	}
 	resp.Headers["X-ProofPulse-Status"] = status
 }

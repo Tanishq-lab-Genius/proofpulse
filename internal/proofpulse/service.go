@@ -47,7 +47,12 @@ func (s *Service) Verify(ctx context.Context, request VerifyRequest) (VerifyResp
 
 	claims, err := s.extractClaims(ctx, draft)
 	if err != nil {
-		return VerifyResponse{}, fmt.Errorf("Bifrost could not extract claims: %w", err)
+		return VerifyResponse{
+			DraftAnswer:      draft,
+			VerifiedAnswer:   draft,
+			Verifications:    []Verification{},
+			VerificationNote: "Claim extraction failed; the original answer is preserved without a freshness verdict.",
+		}, nil
 	}
 	if len(claims) > maxClaims {
 		claims = claims[:maxClaims]
