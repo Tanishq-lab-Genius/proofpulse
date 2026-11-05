@@ -50,6 +50,7 @@ Build the shared object with the same Go version used to build your Bifrost gate
 
 ```bash
 cd bifrost-plugin
+go mod tidy
 mkdir -p build
 go build -buildmode=plugin -o build/proofpulse.so .
 ```
