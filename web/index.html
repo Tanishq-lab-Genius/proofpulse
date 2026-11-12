@@ -16,7 +16,9 @@
       #status { color: #aeb7d2; margin-left: 12px; } #results { margin-top: 36px; display: grid; gap: 16px; }
       .card { background: #111526; border: 1px solid #252d47; padding: 20px; border-radius: 14px; }
       .claim { border-left: 3px solid #7656ff; } .status { text-transform: uppercase; font-size: .75rem; font-weight: 800; color: #c4b5fd; }
-      a { color: #b8a8ff; } pre { white-space: pre-wrap; font: inherit; }
+      .status.stale, .status.unsupported { color: #fca5a5; } .status.verified { color: #6ee7b7; }
+      .answer-card { border-color: rgba(84,224,190,.45); } .evidence-quote { margin: 14px 0; padding: 12px 16px; border-left: 3px solid #54e0be; color: #c8d3e8; background: rgba(84,224,190,.06); }
+      details { margin-top: 12px; } summary { cursor: pointer; color: #aeb7d2; } a { color: #b8a8ff; } pre { white-space: pre-wrap; font: inherit; }
     </style>
   </head>
   <body>
@@ -38,9 +40,20 @@
         try {
           const response = await fetch('/api/verify', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({question})});
           const data = await response.json(); if (!response.ok) throw new Error(data.detail || 'Verification failed');
-          results.innerHTML = `<article class="card"><div class="status">Draft answer</div><pre>${escapeHtml(data.draft_answer)}</pre></article>` +
-            data.verifications.map(item => `<article class="card claim"><div class="status">${item.status} · ${item.freshness_score}% fresh</div><strong>${escapeHtml(item.claim)}</strong><p>${escapeHtml(item.explanation)}</p>${item.corrected_claim ? `<p><b>Correction:</b> ${escapeHtml(item.corrected_claim)}</p>` : ''}<ul>${item.sources.map(source => `<li><a href="${escapeHtml(source.url)}" target="_blank" rel="noreferrer">${escapeHtml(source.title)}</a></li>`).join('')}</ul></article>`).join('') +
-            `<article class="card"><div class="status">Verified answer</div><pre>${escapeHtml(data.verified_answer)}</pre><small>${data.claims_checked} claims checked · ${data.sources_used} sources used</small></article>`;
+          const verifications = data.verifications || [];
+          const answerCard = `<article class="card answer-card"><div class="status">Answer</div><pre>${escapeHtml(data.verified_answer || data.draft_answer || '')}</pre><small>${data.claims_checked} claims checked · ${data.sources_used} sources reviewed</small></article>`;
+          const reviewCards = verifications.map(item => {
+            const sources = item.sources || [];
+            const supportingSource = sources.find(source => source.url === item.evidence_url);
+            const otherSources = sources.filter(source => source.url !== item.evidence_url);
+            const statusClass = ['verified', 'stale', 'unsupported'].includes(item.status) ? item.status : '';
+            const correctionNote = item.status === 'stale' && !item.corrected_claim
+              ? '<p><b>Correction:</b> The evidence shows this claim is outdated, but does not establish the exact current value.</p>'
+              : '';
+            return `<article class="card claim"><div class="status ${statusClass}">${escapeHtml(item.status)}</div><small>Claim currentness: ${Number(item.freshness_score) || 0}%</small><p><b>Claim checked</b><br>${escapeHtml(item.claim)}</p>${item.corrected_claim ? `<p><b>Correction applied in the answer:</b> ${escapeHtml(item.corrected_claim)}</p>` : correctionNote}<p>${escapeHtml(item.explanation)}</p>${item.evidence_quote ? `<blockquote class="evidence-quote">${escapeHtml(item.evidence_quote)}</blockquote>` : ''}${supportingSource ? `<p><b>Supporting source:</b> <a href="${escapeHtml(supportingSource.url)}" target="_blank" rel="noreferrer">${escapeHtml(supportingSource.title)}</a></p>` : ''}${otherSources.length ? `<details><summary>${otherSources.length} other sources reviewed</summary><ul>${otherSources.map(source => `<li><a href="${escapeHtml(source.url)}" target="_blank" rel="noreferrer">${escapeHtml(source.title)}</a></li>`).join('')}</ul></details>` : ''}</article>`;
+          }).join('');
+          const draftDetails = data.draft_answer && data.draft_answer !== data.verified_answer ? `<details class="card"><summary>Show original draft answer</summary><pre>${escapeHtml(data.draft_answer)}</pre></details>` : '';
+          results.innerHTML = answerCard + reviewCards + draftDetails;
           status.textContent = data.verification_note || 'Verification complete.';
         } catch (error) { status.textContent = error.message; }
         finally { button.disabled = false; }

@@ -6,9 +6,10 @@ type VerifyRequest struct {
 }
 
 type Source struct {
-	Title   string `json:"title"`
-	URL     string `json:"url"`
-	Excerpt string `json:"excerpt"`
+	Title         string `json:"title"`
+	URL           string `json:"url"`
+	Excerpt       string `json:"excerpt"`
+	PublishedDate string `json:"published_date,omitempty"`
 }
 
 type Verification struct {
@@ -17,6 +18,8 @@ type Verification struct {
 	FreshnessScore int      `json:"freshness_score"`
 	Explanation    string   `json:"explanation"`
 	CorrectedClaim string   `json:"corrected_claim,omitempty"`
+	EvidenceURL    string   `json:"evidence_url,omitempty"`
+	EvidenceQuote  string   `json:"evidence_quote,omitempty"`
 	Sources        []Source `json:"sources"`
 }
 
