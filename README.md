@@ -29,7 +29,7 @@ Prices, software versions, policies, and availability can change after an AI mod
 ```mermaid
 flowchart LR
     Client[AI app] --> Gateway[Bifrost gateway]
-    Gateway --> Model[OpenRouter model]
+    Gateway --> Model[Configured model provider]
     Model --> Plugin[ProofPulse Bifrost plugin]
     Plugin --> Service[ProofPulse Go service]
     Service --> Search[Tavily live search]
@@ -54,10 +54,12 @@ The plugin checks eligible chat-completion responses before they reach the calle
 ### You’ll need
 
 - Docker Desktop
-- An OpenRouter API key for the model configured in Bifrost
+- An API key for a model provider configured in Bifrost
 - A Tavily API key for evidence search
 
-The deployment operator configures these keys in a private environment file. They are not entered into the public website or committed to GitHub. The current example uses `openrouter/nvidia/nemotron-3.5-super-vl:free`; OpenRouter free-model availability and rate limits can change.
+Bifrost supports multiple model providers, including OpenAI (GPT models), Anthropic (Claude models), Google Gemini, OpenRouter, and others. Use a provider API key; a ChatGPT/Codex or Claude Code subscription login is not automatically an API key for Bifrost.
+
+**This repository’s Docker preset currently configures OpenRouter only.** It expects `OPENROUTER_API_KEY` and defaults to `openrouter/nvidia/nemotron-3.5-super-vl:free`. To use another provider, add its provider configuration and API key to the Bifrost Docker config, then set `BIFROST_MODEL` to a model ID supported by that provider. The deployment operator keeps all keys in a private environment file; they are not entered into the public website or committed to GitHub.
 
 ### Build and start
 
@@ -68,7 +70,7 @@ cp .env.docker.example .env.docker
 open -e .env.docker
 ```
 
-Add your own values for `OPENROUTER_API_KEY` and `TAVILY_API_KEY`. Replace `BIFROST_API_KEY` with a long private secret, then save the file. Keep `.env.docker` private; never commit or share it.
+For the current Docker preset, add your own values for `OPENROUTER_API_KEY` and `TAVILY_API_KEY`. Replace `BIFROST_API_KEY` with a long private secret, then save the file. Keep `.env.docker` private; never commit or share it. To switch the preset to another provider, update the Bifrost provider configuration and its environment variable as described above.
 
 Build and run the combined stack in the background:
 
@@ -109,14 +111,14 @@ For a hosted website to call live verification, the backend needs a public HTTPS
 
 ## Configuration
 
-The Docker setup reads these values from `.env.docker`:
+The current Docker preset reads these values from `.env.docker`. Its provider key is specifically named `OPENROUTER_API_KEY`; it is not a universal variable for every provider.
 
 | Variable | Purpose |
 | --- | --- |
-| `OPENROUTER_API_KEY` | Provider credential Bifrost uses for model requests |
+| `OPENROUTER_API_KEY` | OpenRouter credential used by the current Docker preset |
 | `BIFROST_API_KEY` | Private virtual key ProofPulse uses to call the local Bifrost gateway |
 | `TAVILY_API_KEY` | Server-side credential for live evidence search |
-| `BIFROST_MODEL` | Model ID configured for Bifrost; defaults to the example OpenRouter free model |
+| `BIFROST_MODEL` | Model ID configured in Bifrost; defaults to the example OpenRouter free model |
 
 The service listens on port `8000`. The container connects to its private Bifrost gateway at `127.0.0.1:8080`.
 
