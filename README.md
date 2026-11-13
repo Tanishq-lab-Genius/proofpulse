@@ -4,7 +4,7 @@
   <p><strong>Freshness checks for AI answers.</strong></p>
   <p>A Go verification service and Bifrost gateway plugin, with live evidence search from Tavily.</p>
   <p>
-    <a href="https://proofpulse-cy4nsmwp.manus.space">Product concept site</a>
+    <a href="https://proofpulse-cy4nsmwp.manus.space">ProofPulse site</a>
     &nbsp;·&nbsp;
     <a href="#quick-start">Run with Docker</a>
     &nbsp;·&nbsp;
@@ -103,11 +103,9 @@ The custom plugin lives in [`bifrost-plugin/`](bifrost-plugin/). The Docker buil
 
 The Docker image pins Bifrost `v2.5.0` and builds Bifrost and the plugin with the same Go toolchain. Go plugins must match the Bifrost binary’s Go version, operating system, and architecture; building them separately on different systems can cause plugin load errors.
 
-## Website and demo status
+## ProofPulse as a tool
 
-The [Manus site](https://proofpulse-cy4nsmwp.manus.space) is the product concept site. Its browser demo is illustrative and uses simulated results. The Docker setup provides a live local API at `http://127.0.0.1:8000`; it does not automatically make that API public or connect it to the hosted site.
-
-For a hosted website to call live verification, the backend needs a public HTTPS address, and the frontend API URL and CORS settings must use that address. A temporary tunnel works only while the tunnel and local Docker container are running. For an always-available demo, deploy the backend to a cloud host.
+ProofPulse adds a freshness-review step to AI workflows that use Bifrost. Bifrost routes the model request; the ProofPulse tool checks the resulting answer for time-sensitive claims, searches for current evidence with Tavily, and returns claim-level findings with source links. Claims with unclear or conflicting evidence stay visible for human review.
 
 ## Configuration
 
@@ -145,7 +143,7 @@ Use `docker compose down -v` only if you intentionally want to delete the saved 
 - The prototype focuses on claims likely to become outdated; it does not verify every sentence or every kind of fact.
 - Findings depend on search coverage and model assessment. Unclear evidence should remain a human review decision.
 - OpenRouter free models may be rate-limited or temporarily unavailable.
-- The Manus concept-site demo is simulated; the live backend currently runs locally unless separately deployed.
+- The interactive demo on the ProofPulse site is illustrative; live verification is available through the Docker quick start.
 
 ## License
 
