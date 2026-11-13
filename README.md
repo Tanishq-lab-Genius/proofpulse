@@ -1,15 +1,14 @@
 <div align="center">
-  <img src="assets/proofpulse-mark.svg" alt="ProofPulse logo" width="96" height="96">
+  <img src="assets/proofpulse-mark.svg" alt="ProofPulse logo" width="88" height="88">
   <h1>ProofPulse</h1>
-  <p><strong>Catch stale claims before they reach your users.</strong></p>
-  <p>A Go freshness service and Bifrost plugin, powered by Tavily.</p>
-  <p><strong>Tavily research is included—customers do not need their own Tavily API key.</strong></p>
+  <p><strong>Freshness checks for AI answers.</strong></p>
+  <p>A Go verification service and Bifrost gateway plugin, with live evidence search from Tavily.</p>
   <p>
-    <a href="https://proofpulse-cy4nsmwp.manus.space">Concept site</a>
+    <a href="https://proofpulse-cy4nsmwp.manus.space">Product concept site</a>
+    &nbsp;·&nbsp;
+    <a href="#quick-start">Run with Docker</a>
     &nbsp;·&nbsp;
     <a href="#how-it-works">How it works</a>
-    &nbsp;·&nbsp;
-    <a href="#quick-start">Quick start</a>
   </p>
   <p>
     <a href="https://github.com/Tanishq-lab-Genius/proofpulse/actions/workflows/go-build.yml"><img src="https://github.com/Tanishq-lab-Genius/proofpulse/actions/workflows/go-build.yml/badge.svg?branch=main" alt="Go build"></a>
@@ -19,114 +18,132 @@
 
 ---
 
-ProofPulse checks time-sensitive claims in AI answers against live web evidence. It is built as a small Go service with a custom Bifrost plugin: Bifrost handles model calls, Tavily searches for current sources, and ProofPulse returns claim-level signals and source links.
+> **Hackathon prototype.** ProofPulse highlights evidence and review signals for claims likely to change. It is not a guarantee of truth; check the cited sources before relying on a result.
 
-> **Hackathon prototype:** results depend on available sources and model assessment. Treat the verdict as evidence to review, not a guarantee of truth. For local or self-hosted runs, the service operator configures the Tavily key server-side; customers do not enter it.
+## The idea
 
-## What it does
-
-- Finds up to three claims likely to change, such as prices, versions, policies, dates, or availability.
-- Searches Tavily for current evidence and returns a verdict and source links for each claim.
-- Preserves the original answer when a lookup or assessment is uncertain.
-- Adds the review context to eligible buffered Bifrost chat-completion responses.
-- Fails open: if ProofPulse is unavailable, the original model response continues unchanged.
+Prices, software versions, policies, and availability can change after an AI model learned about them. ProofPulse checks those time-sensitive claims against current web evidence and returns claim-level findings with source links. When evidence is unclear, it marks the claim for review instead of pretending certainty.
 
 ## How it works
 
 ```mermaid
 flowchart LR
-    App[Your app] -->|chat request| Bifrost[Bifrost gateway]
-    Bifrost -->|model response| Plugin[ProofPulse plugin]
-    Plugin -->|question and answer| API[ProofPulse Go service]
-    API -->|claim analysis| Bifrost
-    API -->|live source search| Tavily[Tavily]
-    Tavily --> API
-    Bifrost --> API
-    API -->|verdicts and sources| Plugin
-    Plugin -->|annotated response| App
+    Client[AI app] --> Gateway[Bifrost gateway]
+    Gateway --> Model[OpenRouter model]
+    Model --> Plugin[ProofPulse Bifrost plugin]
+    Plugin --> Service[ProofPulse Go service]
+    Service --> Search[Tavily live search]
+    Service --> Gateway
+    Search --> Service
+    Service --> Plugin
+    Plugin --> Client
 ```
 
-The service exposes a small HTTP API:
+The plugin checks eligible chat-completion responses before they reach the caller. For streaming requests, it buffers the answer, checks it, then releases the completed response. If verification is unavailable, the original successful model response is preserved.
 
-| Route | Purpose |
-| --- | --- |
-| `GET /health` | Check that the service is running |
-| `POST /api/verify` | Generate or check an answer and return claim verdicts |
+## What it does
+
+- Looks for a small set of claims likely to drift, such as prices, versions, policies, dates, and availability.
+- Searches for current evidence with Tavily and returns citations beside each finding.
+- Labels claims `verified`, `stale`, `unsupported`, or `uncertain`.
+- Preserves the original answer when evidence or model assessment is inconclusive.
+- Runs the Go service, Bifrost gateway, and matching ProofPulse plugin together in one Docker container.
 
 ## Quick start
 
-### Requirements
+### You’ll need
 
-- Go 1.22 or later for the ProofPulse service
-- A running Bifrost gateway with a model provider and model configured
-- A Tavily API key for the local service deployment, configured server-side by its operator
+- Docker Desktop
+- An OpenRouter API key for the model configured in Bifrost
+- A Tavily API key for evidence search
 
-### Run the service
+The deployment operator configures these keys in a private environment file. They are not entered into the public website or committed to GitHub. The current example uses `openrouter/nvidia/nemotron-3.5-super-vl:free`; OpenRouter free-model availability and rate limits can change.
+
+### Build and start
 
 ```bash
 git clone https://github.com/Tanishq-lab-Genius/proofpulse.git
 cd proofpulse
-cp .env.example .env
+cp .env.docker.example .env.docker
+open -e .env.docker
 ```
 
-For this prototype, the service operator sets the Tavily key in `.env`; it stays on the server and is not a customer-facing setting. Set `BIFROST_MODEL` to a model available in your Bifrost configuration, then start ProofPulse:
+Add your own values for `OPENROUTER_API_KEY` and `TAVILY_API_KEY`. Replace `BIFROST_API_KEY` with a long private secret, then save the file. Keep `.env.docker` private; never commit or share it.
+
+Build and run the combined stack in the background:
 
 ```bash
-go run ./cmd/proofpulse
+docker compose up -d --build
 ```
 
-Open [http://localhost:8000](http://localhost:8000).
+Docker builds the image as `proofpulse:local`. The first build can take several minutes because it compiles Bifrost, the Go service, and the Go plugin. Port `8000` is published to the host; Bifrost’s internal port is not exposed. The `bifrost-data` Docker volume keeps Bifrost configuration between restarts.
 
-Keep `.env` private; never commit API keys. Build a standalone service binary with:
+### Check the service
 
 ```bash
-go build -o proofpulse ./cmd/proofpulse
+docker compose ps
+curl -sS http://127.0.0.1:8000/health
 ```
 
-### Configuration
-
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `ADDR` | `:8000` | HTTP listen address |
-| `BIFROST_BASE_URL` | `http://localhost:8080/v1` | Bifrost OpenAI-compatible API |
-| `BIFROST_API_KEY` | `local-development` | Key accepted by your local Bifrost gateway, if configured |
-| `BIFROST_MODEL` | `openrouter/free` | Model name configured in Bifrost |
-| `TAVILY_API_KEY` | — | Server-side Tavily credential for this deployment; not a customer-facing setting |
-
-## Build the Bifrost plugin
-
-The plugin lives in `bifrost-plugin/`. It currently handles buffered `/chat/completions` responses; streaming responses pass through without a freshness check.
-
-Build it with the same Go version, operating system, and architecture as your Bifrost gateway:
+Ask ProofPulse to generate an answer and check its claims:
 
 ```bash
-cd bifrost-plugin
-go mod tidy
-mkdir -p build
-go build -buildmode=plugin -o build/proofpulse.so .
+curl -sS -X POST http://127.0.0.1:8000/api/verify \
+  -H 'Content-Type: application/json' \
+  -d '{"question":"Is Node.js 20 still supported? Check current official support information."}'
 ```
 
-Bifrost must be built with dynamic plugin support enabled. Go plugins also need to match the gateway's Go version and platform. See the [Bifrost plugin guide](https://github.com/maximhq/bifrost/blob/dev/docs/plugins/getting-started.mdx) and [dynamic-build instructions](https://github.com/maximhq/bifrost/blob/dev/docs/plugins/building-dynamic-binary.mdx).
+The JSON response includes the draft and verified answers, claim findings, evidence excerpts, source URLs, and counts. See [DOCKER.md](DOCKER.md) for setup, logs, restart, and troubleshooting details.
 
-Configure the plugin with the URL the gateway can use to reach ProofPulse. For Bifrost in Docker on macOS, that is commonly `http://host.docker.internal:8000`; for a native Bifrost process, use `http://127.0.0.1:8000`.
+## Bifrost plugin
 
-```yaml
-bifrost:
-  plugins:
-    custom:
-      - name: proofpulse-freshness
-        enabled: true
-        path: /plugins/proofpulse.so
-        config:
-          service_url: http://host.docker.internal:8000
-          timeout_seconds: 180
+The custom plugin lives in [`bifrost-plugin/`](bifrost-plugin/). The Docker build compiles and installs it into Bifrost automatically. Eligible chat-completion calls are checked through the ProofPulse service, and the plugin adds the freshness review to the model response. The response header `X-ProofPulse-Status` indicates whether the answer was checked, buffered, skipped, or left unchanged.
+
+The Docker image pins Bifrost `v2.5.0` and builds Bifrost and the plugin with the same Go toolchain. Go plugins must match the Bifrost binary’s Go version, operating system, and architecture; building them separately on different systems can cause plugin load errors.
+
+## Website and demo status
+
+The [Manus site](https://proofpulse-cy4nsmwp.manus.space) is the product concept site. Its browser demo is illustrative and uses simulated results. The Docker setup provides a live local API at `http://127.0.0.1:8000`; it does not automatically make that API public or connect it to the hosted site.
+
+For a hosted website to call live verification, the backend needs a public HTTPS address, and the frontend API URL and CORS settings must use that address. A temporary tunnel works only while the tunnel and local Docker container are running. For an always-available demo, deploy the backend to a cloud host.
+
+## Configuration
+
+The Docker setup reads these values from `.env.docker`:
+
+| Variable | Purpose |
+| --- | --- |
+| `OPENROUTER_API_KEY` | Provider credential Bifrost uses for model requests |
+| `BIFROST_API_KEY` | Private virtual key ProofPulse uses to call the local Bifrost gateway |
+| `TAVILY_API_KEY` | Server-side credential for live evidence search |
+| `BIFROST_MODEL` | Model ID configured for Bifrost; defaults to the example OpenRouter free model |
+
+The service listens on port `8000`. The container connects to its private Bifrost gateway at `127.0.0.1:8080`.
+
+## Manage the local stack
+
+```bash
+# Follow logs
+docker compose logs -f
+
+# Stop the container; keep the Bifrost data volume
+docker compose stop
+
+# Start it again later
+docker compose start
+
+# Remove the container and network; keep the data volume
+docker compose down
 ```
 
-## Current scope
+Use `docker compose down -v` only if you intentionally want to delete the saved Bifrost data too.
 
-- Up to three time-sensitive claims are checked per answer to bound the work.
-- Streaming chat responses are not checked in this first version.
-- The concept site contains a simulated browser demo; live verification runs through the Go service.
+## Current limits
+
+- The prototype focuses on claims likely to become outdated; it does not verify every sentence or every kind of fact.
+- Findings depend on search coverage and model assessment. Unclear evidence should remain a human review decision.
+- OpenRouter free models may be rate-limited or temporarily unavailable.
+- The Manus concept-site demo is simulated; the live backend currently runs locally unless separately deployed.
 
 ## License
 
