@@ -1,0 +1,27 @@
+services:
+  proofpulse:
+    build:
+      context: .
+    image: proofpulse:local
+    env_file:
+      - .env.docker
+    environment:
+      ADDR: "0.0.0.0:8000"
+      BIFROST_BASE_URL: "http://127.0.0.1:8080/v1"
+    ports:
+      - "8000:8000"
+    volumes:
+      - bifrost-data:/data/bifrost
+    init: true
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -fsS http://127.0.0.1:8000/health >/dev/null && curl -fsS http://127.0.0.1:8080/health >/dev/null
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 150s
+
+volumes:
+  bifrost-data:

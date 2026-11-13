@@ -1,0 +1,77 @@
+{
+  "$schema": "https://www.getbifrost.ai/schema",
+  "source_of_truth": "config.json",
+  "client": {
+    "allowed_origins": [
+      "https://proofpulse-cy4nsmwp.manus.space",
+      "http://localhost:8000"
+    ],
+    "disable_content_logging": true,
+    "enforce_auth_on_inference": true
+  },
+  "config_store": {
+    "enabled": true,
+    "type": "sqlite",
+    "config": {
+      "path": "/data/bifrost/config.db"
+    }
+  },
+  "logs_store": {
+    "enabled": false,
+    "type": "sqlite",
+    "config": {
+      "path": "/data/bifrost/logs.db"
+    }
+  },
+  "governance": {
+    "virtual_keys": [
+      {
+        "id": "proofpulse-docker",
+        "name": "proofpulse-docker",
+        "value": "env.BIFROST_API_KEY",
+        "is_active": true,
+        "provider_configs": [
+          {
+            "provider": "openrouter",
+            "key_ids": ["*"],
+            "allowed_models": ["*"],
+            "weight": 1
+          }
+        ]
+      }
+    ]
+  },
+  "providers": {
+    "openrouter": {
+      "keys": [
+        {
+          "name": "ProofPulse OpenRouter key",
+          "value": "env.OPENROUTER_API_KEY",
+          "weight": 1,
+          "models": ["*"]
+        }
+      ],
+      "network_config": {
+        "default_request_timeout_in_seconds": 300
+      }
+    }
+  },
+  "plugins": [
+    {
+      "enabled": true,
+      "name": "governance",
+      "config": {
+        "is_vk_mandatory": true
+      }
+    },
+    {
+      "enabled": true,
+      "name": "proofpulse-freshness",
+      "path": "/opt/bifrost/plugins/proofpulse.so",
+      "config": {
+        "service_url": "http://127.0.0.1:8000",
+        "timeout_seconds": 300
+      }
+    }
+  ]
+}
