@@ -107,6 +107,32 @@ The Docker image pins Bifrost `v2.5.0` and builds Bifrost and the plugin with th
 
 ProofPulse adds a freshness-review step to AI workflows that use Bifrost. Bifrost routes the model request; the ProofPulse tool checks the resulting answer for time-sensitive claims, searches for current evidence with Tavily, and returns claim-level findings with source links. Claims with unclear or conflicting evidence stay visible for human review.
 
+## Product roadmap
+
+The hackathon prototype is the first step toward a hosted ProofPulse product. The following capabilities are planned; they are not all available in this repository yet.
+
+1. **A live ProofPulse site.** Connect the public experience to a hosted service so people can submit a question, receive an answer from their chosen model, and inspect live claim findings and evidence.
+2. **Two focused MCP tools for compatible AI clients.**
+   - `check_answer_freshness` will accept a question and an answer, then return time-sensitive claims, review statuses, explanations, and cited evidence.
+   - `research_evidence` will search a topic and return a dated, source-linked evidence pack. This is intended for questions where finding and tracing the evidence matters, including case and historical research.
+3. **Multiple ways to use ProofPulse.** The Bifrost plugin is intended for automatic checks on model traffic routed through Bifrost. Remote MCP connections are the planned way for ChatGPT, Claude, and other compatible clients to call ProofPulse tools in a conversation. Those clients choose when to call tools; MCP does not silently check every answer in every chat. Availability depends on each client’s MCP support, account plan, and workspace settings. See the published [ChatGPT custom MCP server guide](https://developers.openai.com/api/docs/guides/custom-mcp-server) and [Claude remote MCP connector guide](https://support.anthropic.com/en/articles/11503834-building-custom-connectors-via-remote-mcp-servers).
+4. **Production readiness.** Before a broader launch, add user authentication, privacy and retention controls, rate limits, operational monitoring, source-quality checks, and repeatable evaluations for supported workflows.
+
+### Where ProofPulse can help
+
+ProofPulse is most useful when an answer depends on facts that change or when a user needs to inspect where a claim came from. These are promising applications, not claims that every workflow is already supported:
+
+| Area | Useful checks and research | Product fit and safeguards |
+| --- | --- | --- |
+| Software and developer support | API versions, deprecations, release notes, security advisories, and current product documentation | Strong first use case: changes are frequent and official documentation can be cited directly. |
+| Customer support and commerce operations | Prices, plan terms, return policies, product features, and availability | Strong first use case: show the source and date, and route conflicting or unclear evidence for staff review. |
+| Legal and regulatory research | Case status, cited decisions, statutes, regulations, and amendments | High value for evidence gathering; show jurisdiction and date, prefer primary legal sources, and keep legal conclusions with a qualified professional. |
+| Journalism, academic work, and history | Trace claims to original documents, archives, studies, and dated reporting | The evidence-research tool can help even when a historical fact is not “stale”; distinguish primary evidence, secondary sources, and inference. |
+| Finance and compliance | Current filings, rates, eligibility rules, and policy changes | Potential later use; require authoritative sources, clear scope, and human approval for consequential decisions. |
+| Healthcare and public health | Current guidelines, public-health notices, and approved medicine information | Potential later use only with authoritative sources and expert review; ProofPulse should not diagnose or replace clinical judgment. |
+
+**Suggested rollout:** start with developer documentation and customer-support claims, where source dates and changes are easy to demonstrate. Use case and history research to show the broader evidence tool. Expand into finance, compliance, or healthcare only after stronger domain-specific source controls and human-review workflows are in place. This prioritization is our product assessment; the final fit should be validated with users in each field.
+
 ## Configuration
 
 The current Docker preset reads these values from `.env.docker`. Its provider key is specifically named `OPENROUTER_API_KEY`; it is not a universal variable for every provider.
