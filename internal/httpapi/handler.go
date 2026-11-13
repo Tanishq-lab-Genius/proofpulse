@@ -23,7 +23,34 @@ func NewHandler(service *proofpulse.Service) http.Handler {
 	mux.HandleFunc("GET /", h.home)
 	mux.HandleFunc("GET /health", h.health)
 	mux.HandleFunc("POST /api/verify", h.verify)
-	return mux
+	return withCORS(mux)
+}
+
+const manusOrigin = "https://proofpulse-cy4nsmwp.manus.space"
+
+func withCORS(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		origin := r.Header.Get("Origin")
+		allowedOrigin := origin == manusOrigin
+		if allowedOrigin {
+			w.Header().Set("Access-Control-Allow-Origin", manusOrigin)
+			w.Header().Add("Vary", "Origin")
+			w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+			w.Header().Set("Access-Control-Max-Age", "600")
+		}
+
+		if r.Method == http.MethodOptions && r.URL.Path == "/api/verify" {
+			if !allowedOrigin {
+				http.Error(w, "origin not allowed", http.StatusForbidden)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (h *Handler) home(w http.ResponseWriter, r *http.Request) {
