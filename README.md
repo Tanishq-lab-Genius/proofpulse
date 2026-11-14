@@ -61,9 +61,53 @@ Replace the host placeholder with the public HTTPS API address supplied by the p
 
 **Readiness:** the repository currently has the local ProofPulse API and Docker stack, but the shared, team-hosted API endpoint is not deployed yet. Until it is deployed and its URL is published, this judge command is not ready to run. Do not substitute `localhost` or a temporary tunnel: those point to one computer and are unavailable when it is off.
 
-### Maintainer self-hosted setup
+### Run the full stack locally (maintainer setup)
 
-To run the entire service and Bifrost locally, maintainers can follow [DOCKER.md](DOCKER.md). That path requires the project operator's provider credentials in a private `.env.docker` file. It is not the keyless judge path above.
+Use this route to run the ProofPulse API, Bifrost gateway, and ProofPulse plugin together on your computer. Docker starts and connects the services for you; you do not need to start Bifrost and ProofPulse in separate Terminal tabs. This local route uses the quotas of the accounts whose credentials you configure. It is separate from the keyless judge CLI above.
+
+**You need:** Docker Desktop running, a model-provider API key, and a Tavily API key. The bundled Bifrost configuration currently uses OpenRouter. The `BIFROST_API_KEY` below is a private virtual key that ProofPulse presents to your local Bifrost gateway; it is not your model-provider key.
+
+1. From the repository folder, create and open the private environment file:
+
+   ```bash
+   cd ~/proofpulse
+   cp .env.docker.example .env.docker
+   open -e .env.docker
+   ```
+
+2. Replace the placeholders in `.env.docker` and save the file:
+   - `OPENROUTER_API_KEY`: your OpenRouter model-provider key for the bundled configuration.
+   - `TAVILY_API_KEY`: your Tavily key for live evidence searches.
+   - `BIFROST_API_KEY`: choose a long, private value. The Docker preset registers this value with Bifrost and ProofPulse uses it to authenticate to the gateway.
+   - `BIFROST_MODEL`: the model ID sent through Bifrost. Keep the example unless you have configured another model in Bifrost.
+
+   To use a different model provider, configure that provider in the Bifrost configuration as well as supplying its key; changing only the key may not be enough. Never share or commit `.env.docker`.
+
+3. Build and start the complete stack:
+
+   ```bash
+   docker compose up -d --build
+   ```
+
+   The first build can take several minutes. After it finishes, the services run in the background through Docker Desktop.
+
+4. Check that the local API is healthy:
+
+   ```bash
+   curl -sS http://127.0.0.1:8000/health
+   ```
+
+5. Ask a question; ProofPulse generates an answer, checks time-sensitive claims, and returns findings with evidence:
+
+   ```bash
+   curl -sS -X POST http://127.0.0.1:8000/api/verify \
+     -H 'Content-Type: application/json' \
+     -d '{"question":"Is Node.js 20 still supported?"}'
+   ```
+
+Use `docker compose logs -f` to inspect service logs, `docker compose stop` to stop the stack, and `docker compose start` to start it again. For troubleshooting and the full Docker details, see [DOCKER.md](DOCKER.md).
+
+**Local versus judge setup:** this section requires your provider and Tavily keys because the services run on your computer. The keyless judge command above needs no judge-owned keys, but it will work only after the team deploys the shared ProofPulse API and publishes its stable HTTPS URL. That hosted endpoint is not deployed yet.
 
 ## Demo status
 
