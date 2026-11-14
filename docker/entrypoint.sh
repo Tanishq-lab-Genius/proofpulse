@@ -6,8 +6,9 @@ set -Eeuo pipefail
 : "${TAVILY_API_KEY:?Set TAVILY_API_KEY in .env.docker}"
 : "${BIFROST_MODEL:=openrouter/nvidia/nemotron-3.5-super-vl:free}"
 
+export PORT="${PORT:-8000}"
 mkdir -p /data/bifrost
-cp /opt/bifrost/config.template.json /data/bifrost/config.json
+sed "s/__PROOFPULSE_PORT__/${PORT}/g" /opt/bifrost/config.template.json > /data/bifrost/config.json
 
 /usr/local/bin/bifrost-http -app-dir /data/bifrost -host 127.0.0.1 -port 8080 &
 bifrost_pid=$!
@@ -37,7 +38,7 @@ if [[ "${ready}" != "1" ]]; then
   exit 1
 fi
 
-export ADDR="0.0.0.0:8000"
+export ADDR="0.0.0.0:${PORT}"
 export BIFROST_BASE_URL="http://127.0.0.1:8080/v1"
 /usr/local/bin/proofpulse &
 proofpulse_pid=$!

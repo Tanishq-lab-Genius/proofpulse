@@ -24,12 +24,28 @@
     }
   },
   "governance": {
+    "budgets": [
+      {
+        "id": "proofpulse-daily-budget",
+        "max_limit": 2,
+        "reset_duration": "1d",
+        "virtual_key_id": "proofpulse-docker"
+      }
+    ],
+    "rate_limits": [
+      {
+        "id": "proofpulse-daily-rate",
+        "request_max_limit": 100,
+        "request_reset_duration": "1d"
+      }
+    ],
     "virtual_keys": [
       {
         "id": "proofpulse-docker",
         "name": "proofpulse-docker",
         "value": "env.BIFROST_API_KEY",
         "is_active": true,
+        "rate_limit_id": "proofpulse-daily-rate",
         "provider_configs": [
           {
             "provider": "openrouter",
@@ -69,7 +85,7 @@
       "name": "proofpulse-freshness",
       "path": "/opt/bifrost/plugins/proofpulse.so",
       "config": {
-        "service_url": "http://127.0.0.1:8000",
+        "service_url": "http://127.0.0.1:__PROOFPULSE_PORT__",
         "timeout_seconds": 300
       }
     }
