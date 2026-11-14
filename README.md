@@ -28,7 +28,7 @@ AI answers can sound certain after a price, software release, policy, or other f
 
 ProofPulse is a freshness-checking tool for AI answers. A user asks a question; ProofPulse gets an answer from the configured model, checks claims that may change, and returns the answer with claim-level findings and source links. The freshness check is the core workflow. Evidence accompanies the findings, including when a claim appears current; unclear or conflicting evidence stays marked for review.
 
-In the intended hosted experience, judges and end users ask questions directly. **They do not enter OpenRouter, model-provider, Bifrost, or Tavily API keys.** The project operator configures and protects those credentials on the server; the browser sends the question, not provider secrets.
+For the judge experience, the goal is a terminal command that accepts a question and prints the answer, freshness findings, and evidence. Judges should not need OpenRouter, model-provider, Bifrost, or Tavily credentials. Those provider credentials belong in a ProofPulse service controlled by the project team; the terminal client sends only the question to that service.
 
 ## How ProofPulse works
 
@@ -45,11 +45,29 @@ flowchart LR
 
 ProofPulse checks claims individually and labels them `verified`, `stale`, `unsupported`, or `uncertain`. It preserves the original answer when the evidence is unclear instead of presenting a guess as a correction. The Bifrost plugin can apply the same freshness review to eligible model responses routed through the gateway.
 
+## Run ProofPulse from Terminal
+
+### Judge setup (keyless client)
+
+The judge flow uses the team-hosted ProofPulse API, so it does not ask judges to create provider accounts or paste secrets. The CLI is in this repository. Once the team publishes the API URL, a judge can run:
+
+```bash
+git clone https://github.com/Tanishq-lab-Genius/proofpulse.git
+cd proofpulse
+go run ./cmd/proofpulse-cli -server "https://<TEAM-PROOFPULSE-API-HOST>" "Is Node.js 20 still supported, and which Node.js release line is Active LTS?"
+```
+
+Replace the host placeholder with the public HTTPS API address supplied by the project team. The command sends a question-only request and prints the generated answer, per-claim freshness status, explanation, correction when available, and source links. No model, Bifrost, or Tavily key is entered in the judge's terminal.
+
+**Readiness:** the repository currently has the local ProofPulse API and Docker stack, but the shared, team-hosted API endpoint is not deployed yet. Until it is deployed and its URL is published, this judge command is not ready to run. Do not substitute `localhost` or a temporary tunnel: those point to one computer and are unavailable when it is off.
+
+### Maintainer self-hosted setup
+
+To run the entire service and Bifrost locally, maintainers can follow [DOCKER.md](DOCKER.md). That path requires the project operator's provider credentials in a private `.env.docker` file. It is not the keyless judge path above.
+
 ## Demo status
 
-The Go backend supports a question-only request and can generate an answer, search evidence, and return structured findings using credentials configured by the operator. The public product site is available, but its connection to a deployed public backend is still in progress. Until that connection is live, any site output labelled simulated or illustrative is not a live ProofPulse verification.
-
-The current Docker deployment is an operator/maintainer path. It requires the project’s server-side model-provider and Tavily credentials. This is not a setup requirement for judges in the planned hosted experience.
+The Go backend supports a question-only request and can generate an answer, search evidence, and return structured findings using credentials configured by the operator. The website is a simulated product concept; it is not the required live demo. The judge demo is intended to run from Terminal through the keyless CLI and the team's hosted API. Hosting that API and publishing its URL are still required before judges can use this flow.
 
 ## What the prototype demonstrates
 
@@ -74,15 +92,15 @@ These are promising applications, not a claim that the prototype is validated fo
 
 ## Roadmap
 
-The roadmap keeps one product focus: **check the freshness of an answer and show the evidence that supports the review.**
+The roadmap keeps one product focus: **check the freshness of an answer and show the evidence that supports the review.** The first delivery priority is a dependable terminal demo for judges; the website remains a simulated concept for the product's future direction.
 
-### 1. Host the judge-ready experience
+### 1. Deliver the keyless Terminal judge flow
 
-Deploy the ProofPulse API behind a stable HTTPS address and connect the product site to it. The operator will add model-provider, Bifrost, and Tavily credentials to the host’s private secret settings. Judges will open the site, ask a question, and see the answer and freshness findings without creating provider accounts or pasting keys.
+Deploy the ProofPulse API behind a stable HTTPS address, configure the project's model-provider and Tavily credentials in the host's private secret settings, and apply request and spend limits. Publish the API address with the repository's terminal CLI instructions. Judges then send questions from Terminal without provider keys. This shared-service flow, not the current local Docker setup, is the keyless judge experience.
 
 ### 2. Bring ProofPulse into compatible AI clients
 
-Offer the same freshness-first workflow through a remote MCP tool for compatible AI clients, alongside the Bifrost plugin for model traffic routed through the gateway. A client explicitly invokes ProofPulse with a question; ProofPulse returns the answer, freshness findings, and evidence. Provider and Tavily credentials remain managed by ProofPulse on the server. The hosted MCP tool is planned and is not live yet.
+After the terminal flow is reliable, offer the same freshness-first workflow through a remote MCP tool for compatible AI clients, alongside the Bifrost plugin for model traffic routed through the gateway. A client explicitly invokes ProofPulse with a question; ProofPulse returns the answer, freshness findings, and evidence. Provider and Tavily credentials remain managed by ProofPulse on the server. The hosted MCP tool is planned and is not live yet.
 
 ### 3. Make the hosted service dependable
 
@@ -94,9 +112,9 @@ As use grows, meter questions, model usage, and evidence searches; enforce budge
 
 ## Current implementation
 
-The repository contains the Go verification service, the Bifrost plugin, and a Docker configuration for running the prototype stack. The current Docker preset uses OpenRouter as its configured model provider and Tavily for evidence search. Bifrost supports other providers, but changing the provider requires updating the operator’s Bifrost configuration. Keep deployment credentials in the host’s private secret store or local ignored environment file; never put them in the website, a public example, or a commit.
+The repository contains the Go verification service, the Bifrost plugin, a local Docker configuration, and a Terminal CLI for calling a ProofPulse API. The local Docker preset uses OpenRouter as its configured model provider and Tavily for evidence search; it needs operator credentials. The CLI does not need provider credentials, but it needs a reachable ProofPulse API URL. The team-hosted API is not deployed yet, so the complete keyless judge flow is not yet available. Keep deployment credentials in the host's private secret store or local ignored environment file; never put them in the website, a public example, a CLI build, or a commit.
 
-For operator-only local deployment notes, see [DOCKER.md](DOCKER.md). The Bifrost plugin source and its build notes are in [`bifrost-plugin/`](bifrost-plugin/).
+For maintainer-only local deployment notes, see [DOCKER.md](DOCKER.md). The Bifrost plugin source and its build notes are in [`bifrost-plugin/`](bifrost-plugin/).
 
 ## Project status and limits
 

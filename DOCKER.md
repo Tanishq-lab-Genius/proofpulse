@@ -1,6 +1,8 @@
-# Run ProofPulse and Bifrost with Docker
+# Run ProofPulse and Bifrost with Docker (maintainer setup)
 
 This local Docker setup runs the ProofPulse Go service, Bifrost, and the matching ProofPulse Bifrost plugin together. Bifrost listens only inside the container; port 8000 is the only published port. The Bifrost configuration database is kept in a named Docker volume.
+
+> **This is the maintainer self-hosted path.** It requires model-provider, Bifrost, and Tavily credentials in a private `.env.docker` file. Judges should use the keyless Terminal CLI with the team-hosted ProofPulse API once that service URL is published; they should not create or supply provider keys.
 
 ## First run
 
@@ -51,4 +53,4 @@ cd ~/proofpulse && docker compose stop
 
 Start it again later with `docker compose start`. Inspect logs with `docker compose logs -f`; remove the container with `docker compose down` (the named data volume is retained unless you add `-v`).
 
-This runs on your computer. It is a repeatable Docker deployment, but it does not make the public Manus website independent of your computer; a cloud deployment is a separate next step.
+This runs on your computer. It is a repeatable Docker deployment, but it does not make the public Manus website or the keyless judge API independent of your computer; a stable hosted service is a separate deployment step.
