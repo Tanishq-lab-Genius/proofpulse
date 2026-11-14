@@ -1,14 +1,14 @@
 <div align="center">
   <img src="assets/proofpulse-mark.svg" alt="ProofPulse logo" width="88" height="88">
   <h1>ProofPulse</h1>
-  <p><strong>Freshness checks for AI answers.</strong></p>
-  <p>A Go verification service and Bifrost gateway plugin, with live evidence search from Tavily.</p>
+  <p><strong>Freshness checks and evidence for AI answers.</strong></p>
+  <p>One tool that checks what may have changed, shows the evidence, and flags what needs a human review.</p>
   <p>
-    <a href="https://proofpulse-cy4nsmwp.manus.space">ProofPulse site</a>
+    <a href="https://proofpulse-cy4nsmwp.manus.space">Product site</a>
     &nbsp;·&nbsp;
-    <a href="#quick-start">Run with Docker</a>
+    <a href="#how-proofpulse-works">How it works</a>
     &nbsp;·&nbsp;
-    <a href="#how-it-works">How it works</a>
+    <a href="#roadmap">Roadmap</a>
   </p>
   <p>
     <a href="https://github.com/Tanishq-lab-Genius/proofpulse/actions/workflows/go-build.yml"><img src="https://github.com/Tanishq-lab-Genius/proofpulse/actions/workflows/go-build.yml/badge.svg?branch=main" alt="Go build"></a>
@@ -18,156 +18,89 @@
 
 ---
 
-> **Hackathon prototype.** ProofPulse highlights evidence and review signals for claims likely to change. It is not a guarantee of truth; check the cited sources before relying on a result.
+> **Hackathon prototype.** ProofPulse helps people inspect time-sensitive claims and their sources. A status is an evidence signal, not a guarantee of truth; review the cited material before relying on consequential answers.
 
-## The idea
+## The problem
 
-Prices, software versions, policies, and availability can change after an AI model learned about them. ProofPulse checks those time-sensitive claims against current web evidence and returns claim-level findings with source links. When evidence is unclear, it marks the claim for review instead of pretending certainty.
+AI answers can sound certain after a price, software release, policy, or other fact has changed. People need more than a fluent answer: they need to know which claims may have drifted and what current evidence says.
 
-## How it works
+## The product
+
+ProofPulse is a freshness-checking tool for AI answers. A user asks a question; ProofPulse gets an answer from the configured model, checks claims that may change, and returns the answer with claim-level findings and source links. The freshness check is the core workflow. Evidence accompanies the findings, including when a claim appears current; unclear or conflicting evidence stays marked for review.
+
+In the intended hosted experience, judges and end users ask questions directly. **They do not enter OpenRouter, model-provider, Bifrost, or Tavily API keys.** The project operator configures and protects those credentials on the server; the browser sends the question, not provider secrets.
+
+## How ProofPulse works
 
 ```mermaid
 flowchart LR
-    Client[AI app] --> Gateway[Bifrost gateway]
-    Gateway --> Model[Configured model provider]
-    Model --> Plugin[ProofPulse Bifrost plugin]
-    Plugin --> Service[ProofPulse Go service]
-    Service --> Search[Tavily live search]
-    Service --> Gateway
-    Search --> Service
-    Service --> Plugin
-    Plugin --> Client
+    Person[Person asks a question] --> ProofPulse[ProofPulse]
+    ProofPulse --> Gateway[Bifrost routes the model request]
+    Gateway --> Model[Configured model]
+    Model --> ProofPulse
+    ProofPulse --> Search[Tavily finds current evidence]
+    Search --> ProofPulse
+    ProofPulse --> Result[Answer, freshness findings, and sources]
 ```
 
-The plugin checks eligible chat-completion responses before they reach the caller. For streaming requests, it buffers the answer, checks it, then releases the completed response. If verification is unavailable, the original successful model response is preserved.
+ProofPulse checks claims individually and labels them `verified`, `stale`, `unsupported`, or `uncertain`. It preserves the original answer when the evidence is unclear instead of presenting a guess as a correction. The Bifrost plugin can apply the same freshness review to eligible model responses routed through the gateway.
 
-## What it does
+## Demo status
 
-- Looks for a small set of claims likely to drift, such as prices, versions, policies, dates, and availability.
-- Searches for current evidence with Tavily and returns citations beside each finding.
-- Labels claims `verified`, `stale`, `unsupported`, or `uncertain`.
-- Preserves the original answer when evidence or model assessment is inconclusive.
-- Runs the Go service, Bifrost gateway, and matching ProofPulse plugin together in one Docker container.
+The Go backend supports a question-only request and can generate an answer, search evidence, and return structured findings using credentials configured by the operator. The public product site is available, but its connection to a deployed public backend is still in progress. Until that connection is live, any site output labelled simulated or illustrative is not a live ProofPulse verification.
 
-## Quick start
+The current Docker deployment is an operator/maintainer path. It requires the project’s server-side model-provider and Tavily credentials. This is not a setup requirement for judges in the planned hosted experience.
 
-### You’ll need
+## What the prototype demonstrates
 
-- Docker Desktop
-- An API key for a model provider configured in Bifrost
-- A Tavily API key for evidence search
+- A question can produce an answer without the user supplying an answer or API key.
+- Claims likely to change are checked against current web evidence.
+- Each finding carries an explanation and source links for inspection.
+- Current-looking, stale, unsupported, and unclear claims are distinguished.
+- The Bifrost gateway and its ProofPulse plugin keep the model request in one routed workflow.
 
-Bifrost supports multiple model providers, including OpenAI (GPT models), Anthropic (Claude models), Google Gemini, OpenRouter, and others. Use a provider API key; a ChatGPT/Codex or Claude Code subscription login is not automatically an API key for Bifrost.
+## Where it can help
 
-**This repository’s Docker preset currently configures OpenRouter only.** It expects `OPENROUTER_API_KEY` and defaults to `openrouter/nvidia/nemotron-3.5-super-vl:free`. To use another provider, add its provider configuration and API key to the Bifrost Docker config, then set `BIFROST_MODEL` to a model ID supported by that provider. The deployment operator keeps all keys in a private environment file; they are not entered into the public website or committed to GitHub.
-
-### Build and start
-
-```bash
-git clone https://github.com/Tanishq-lab-Genius/proofpulse.git
-cd proofpulse
-cp .env.docker.example .env.docker
-open -e .env.docker
-```
-
-For the current Docker preset, add your own values for `OPENROUTER_API_KEY` and `TAVILY_API_KEY`. Replace `BIFROST_API_KEY` with a long private secret, then save the file. Keep `.env.docker` private; never commit or share it. To switch the preset to another provider, update the Bifrost provider configuration and its environment variable as described above.
-
-Build and run the combined stack in the background:
-
-```bash
-docker compose up -d --build
-```
-
-Docker builds the image as `proofpulse:local`. The first build can take several minutes because it compiles Bifrost, the Go service, and the Go plugin. Port `8000` is published to the host; Bifrost’s internal port is not exposed. The `bifrost-data` Docker volume keeps Bifrost configuration between restarts.
-
-### Check the service
-
-```bash
-docker compose ps
-curl -sS http://127.0.0.1:8000/health
-```
-
-Ask ProofPulse to generate an answer and check its claims:
-
-```bash
-curl -sS -X POST http://127.0.0.1:8000/api/verify \
-  -H 'Content-Type: application/json' \
-  -d '{"question":"Is Node.js 20 still supported? Check current official support information."}'
-```
-
-The JSON response includes the draft and verified answers, claim findings, evidence excerpts, source URLs, and counts. See [DOCKER.md](DOCKER.md) for setup, logs, restart, and troubleshooting details.
-
-## Bifrost plugin
-
-The custom plugin lives in [`bifrost-plugin/`](bifrost-plugin/). The Docker build compiles and installs it into Bifrost automatically. Eligible chat-completion calls are checked through the ProofPulse service, and the plugin adds the freshness review to the model response. The response header `X-ProofPulse-Status` indicates whether the answer was checked, buffered, skipped, or left unchanged.
-
-The Docker image pins Bifrost `v2.5.0` and builds Bifrost and the plugin with the same Go toolchain. Go plugins must match the Bifrost binary’s Go version, operating system, and architecture; building them separately on different systems can cause plugin load errors.
-
-## ProofPulse as a tool
-
-ProofPulse adds a freshness-review step to AI workflows that use Bifrost. Bifrost routes the model request; the ProofPulse tool checks the resulting answer for time-sensitive claims, searches for current evidence with Tavily, and returns claim-level findings with source links. Claims with unclear or conflicting evidence stay visible for human review.
-
-## Product roadmap
-
-The hackathon prototype is the first step toward a hosted ProofPulse product. The following capabilities are planned; they are not all available in this repository yet.
-
-1. **A live ProofPulse site.** Connect the public experience to a hosted service so people can submit a question, receive an answer from their chosen model, and inspect live claim findings and evidence.
-2. **One freshness-first workflow, available through compatible clients.** A single ProofPulse operation will take a question and, optionally, a draft answer. If no answer is provided, ProofPulse will generate one using the configured model, then check its time-sensitive claims. It will seek and attach evidence for checked claims whether they appear current or stale; when evidence contradicts a claim, it can provide an evidence-backed correction. Unclear or conflicting results remain flagged for human review. Case and history questions fit this same flow: the answer is checked and accompanied by traceable sources, rather than sent to a separate research function.
-3. **Multiple ways to use the same capability.** The Bifrost plugin is intended for automatic checks on model traffic routed through Bifrost. A single remote MCP tool is the planned way for ChatGPT, Claude, and other compatible clients to ask ProofPulse to answer and check a question in a conversation. Those clients choose when to call the tool; MCP does not silently check every answer in every chat. Availability depends on each client’s MCP support, account plan, and workspace settings. See the published [ChatGPT custom MCP server guide](https://developers.openai.com/api/docs/guides/custom-mcp-server) and [Claude remote MCP connector guide](https://support.anthropic.com/en/articles/11503834-building-custom-connectors-via-remote-mcp-servers).
-4. **Production readiness.** Before a broader launch, add user authentication, privacy and retention controls, rate limits, operational monitoring, source-quality checks, and repeatable evaluations for supported workflows.
-
-### Where ProofPulse can help
-
-ProofPulse is most useful when an answer depends on facts that change or when a user needs to inspect where a claim came from. These are promising applications, not claims that every workflow is already supported:
-
-| Area | Useful checks and research | Product fit and safeguards |
+| Area | Example time-sensitive claims | Evidence that matters |
 | --- | --- | --- |
-| Software and developer support | API versions, deprecations, release notes, security advisories, and current product documentation | Strong first use case: changes are frequent and official documentation can be cited directly. |
-| Customer support and commerce operations | Prices, plan terms, return policies, product features, and availability | Strong first use case: show the source and date, and route conflicting or unclear evidence for staff review. |
-| Legal and regulatory research | Case status, cited decisions, statutes, regulations, and amendments | High value for evidence gathering; show jurisdiction and date, prefer primary legal sources, and keep legal conclusions with a qualified professional. |
-| Journalism, academic work, and history | Trace claims to original documents, archives, studies, and dated reporting | The same freshness-first workflow can still provide traceable evidence for historical claims; distinguish primary evidence, secondary sources, and inference. |
-| Finance and compliance | Current filings, rates, eligibility rules, and policy changes | Potential later use; require authoritative sources, clear scope, and human approval for consequential decisions. |
-| Healthcare and public health | Current guidelines, public-health notices, and approved medicine information | Potential later use only with authoritative sources and expert review; ProofPulse should not diagnose or replace clinical judgment. |
+| Software and developer support | Current versions, deprecations, API behavior, security notices | Official documentation, release notes, and advisories |
+| Customer support and commerce | Prices, plan terms, product features, and availability | Current product pages and published policies |
+| Legal and regulatory research | Case status, cited decisions, statutes, and rule changes | Primary legal sources, jurisdiction, and date; expert review remains necessary |
+| Journalism, education, and history | Dates, attributed statements, and changing interpretations | Original documents, archives, studies, and dated reporting |
+| Finance and compliance | Filings, rates, eligibility, and policy updates | Authoritative sources and human approval for consequential decisions |
+| Healthcare and public health | Current guidance and public notices | Authoritative health sources and qualified professional review |
 
-**Suggested rollout:** start with developer documentation and customer-support claims, where source dates and changes are easy to demonstrate. Use a case or history question to show that the same freshness check also returns evidence, even when the answer is current. Expand into finance, compliance, or healthcare only after stronger domain-specific source controls and human-review workflows are in place. This prioritization is our product assessment; the final fit should be validated with users in each field.
+These are promising applications, not a claim that the prototype is validated for every domain. The strongest initial demonstrations are software documentation and customer-support facts, where source dates and changes are easy to show. The same freshness-first workflow can also return evidence for history or case research.
 
-## Configuration
+## Roadmap
 
-The current Docker preset reads these values from `.env.docker`. Its provider key is specifically named `OPENROUTER_API_KEY`; it is not a universal variable for every provider.
+The roadmap keeps one product focus: **check the freshness of an answer and show the evidence that supports the review.**
 
-| Variable | Purpose |
-| --- | --- |
-| `OPENROUTER_API_KEY` | OpenRouter credential used by the current Docker preset |
-| `BIFROST_API_KEY` | Private virtual key ProofPulse uses to call the local Bifrost gateway |
-| `TAVILY_API_KEY` | Server-side credential for live evidence search |
-| `BIFROST_MODEL` | Model ID configured in Bifrost; defaults to the example OpenRouter free model |
+### 1. Host the judge-ready experience
 
-The service listens on port `8000`. The container connects to its private Bifrost gateway at `127.0.0.1:8080`.
+Deploy the ProofPulse API behind a stable HTTPS address and connect the product site to it. The operator will add model-provider, Bifrost, and Tavily credentials to the host’s private secret settings. Judges will open the site, ask a question, and see the answer and freshness findings without creating provider accounts or pasting keys.
 
-## Manage the local stack
+### 2. Bring ProofPulse into compatible AI clients
 
-```bash
-# Follow logs
-docker compose logs -f
+Offer the same freshness-first workflow through a remote MCP tool for compatible AI clients, alongside the Bifrost plugin for model traffic routed through the gateway. A client explicitly invokes ProofPulse with a question; ProofPulse returns the answer, freshness findings, and evidence. Provider and Tavily credentials remain managed by ProofPulse on the server. The hosted MCP tool is planned and is not live yet.
 
-# Stop the container; keep the Bifrost data volume
-docker compose stop
+### 3. Make the hosted service dependable
 
-# Start it again later
-docker compose start
+Add user accounts, per-user request and spend limits, monitoring, privacy and retention controls, source-quality checks, and repeatable evaluations. Keep evidence visible and route unclear or high-impact claims to human review.
 
-# Remove the container and network; keep the data volume
-docker compose down
-```
+### 4. Scale and offer subscriptions
 
-Use `docker compose down -v` only if you intentionally want to delete the saved Bifrost data too.
+As use grows, meter questions, model usage, and evidence searches; enforce budgets and abuse limits; and add subscription tiers based on predictable usage allowances. ProofPulse would continue to use project-managed provider accounts, so subscribers would not need their own model or Tavily keys. A later service can separate request handling from background research, cache eligible repeated lookups with clear freshness windows, and scale workers as demand grows. These are future plans, not features represented as complete today.
 
-## Current limits
+## Current implementation
 
-- The prototype focuses on claims likely to become outdated; it does not verify every sentence or every kind of fact.
-- Findings depend on search coverage and model assessment. Unclear evidence should remain a human review decision.
-- OpenRouter free models may be rate-limited or temporarily unavailable.
-- The interactive demo on the ProofPulse site is illustrative; live verification is available through the Docker quick start.
+The repository contains the Go verification service, the Bifrost plugin, and a Docker configuration for running the prototype stack. The current Docker preset uses OpenRouter as its configured model provider and Tavily for evidence search. Bifrost supports other providers, but changing the provider requires updating the operator’s Bifrost configuration. Keep deployment credentials in the host’s private secret store or local ignored environment file; never put them in the website, a public example, or a commit.
+
+For operator-only local deployment notes, see [DOCKER.md](DOCKER.md). The Bifrost plugin source and its build notes are in [`bifrost-plugin/`](bifrost-plugin/).
+
+## Project status and limits
+
+ProofPulse is an early hackathon prototype. Claim extraction and model assessment can be imperfect, source search can return incomplete or conflicting material, and provider availability or quotas can affect a run. `uncertain` and `unsupported` are meaningful outcomes: check the evidence and do not treat the product as an automatic fact guarantee.
 
 ## License
 
