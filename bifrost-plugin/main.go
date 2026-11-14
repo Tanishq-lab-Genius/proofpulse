@@ -174,7 +174,7 @@ func HTTPTransportPostHook(_ *schemas.BifrostContext, req *schemas.HTTPRequest, 
 		setStatus(resp, "unchanged")
 		return nil
 	}
-	updatedAnswer := appendCitations(result.VerifiedAnswer, result.Verifications)
+	updatedAnswer := appendCitations(result.VerifiedAnswer, strings.TrimSpace(result.VerifiedAnswer) != strings.TrimSpace(answer), result.Verifications)
 	updatedBody, err := replaceCompletionContent(resp.Body, updatedAnswer)
 	if err != nil {
 		setStatus(resp, "unchanged")
@@ -283,7 +283,7 @@ func HTTPTransportStreamChunkHook(ctx *schemas.BifrostContext, req *schemas.HTTP
 	if strings.TrimSpace(answer) != "" {
 		result, err := verifyThroughServiceContext(ctx, question, answer)
 		if err == nil && result.ClaimsChecked > 0 && strings.TrimSpace(result.VerifiedAnswer) != "" {
-			verifiedAnswer = appendCitations(result.VerifiedAnswer, result.Verifications)
+			verifiedAnswer = appendCitations(result.VerifiedAnswer, strings.TrimSpace(result.VerifiedAnswer) != strings.TrimSpace(answer), result.Verifications)
 		}
 	}
 
@@ -478,6 +478,9 @@ func replaceCompletionContent(body []byte, content string) ([]byte, error) {
 		return nil, err
 	}
 	message["content"] = encodedContent
+	for _, key := range []string{"reasoning", "reasoning_content", "reasoning_details"} {
+		delete(message, key)
+	}
 	choice["message"], err = json.Marshal(message)
 	if err != nil {
 		return nil, err
@@ -493,7 +496,7 @@ func replaceCompletionContent(body []byte, content string) ([]byte, error) {
 	return json.Marshal(envelope)
 }
 
-func appendCitations(answer string, verifications []struct {
+func appendCitations(answer string, answerWasRewritten bool, verifications []struct {
 	Claim          string `json:"claim"`
 	Status         string `json:"status"`
 	FreshnessScore int    `json:"freshness_score"`
@@ -506,69 +509,105 @@ func appendCitations(answer string, verifications []struct {
 		URL   string `json:"url"`
 	} `json:"sources"`
 }) string {
-	var reports []string
-	for index, item := range verifications {
-		claim := cleanDisplayText(item.Claim)
-		if claim == "" {
-			claim = "Checked claim"
-		}
-
-		status := "Needs review"
-		switch strings.ToLower(strings.TrimSpace(item.Status)) {
-		case "verified":
-			status = "Verified"
-		case "stale":
-			status = "Stale"
-		case "unsupported":
-			status = "Unsupported"
-		}
-
-		lines := []string{fmt.Sprintf("**%d. %s** · **Claim currentness: %d%%**", index+1, status, item.FreshnessScore), "- **Claim checked:** " + claim}
-		if strings.EqualFold(strings.TrimSpace(item.Status), "stale") && strings.TrimSpace(item.CorrectedClaim) == "" {
-			lines = append(lines, "- **Correction:** The evidence shows this claim is outdated, but does not establish the exact current value.")
-		}
-		if correction := cleanDisplayText(item.CorrectedClaim); correction != "" {
-			lines = append(lines, "- **Evidence-supported correction:** "+correction)
-		}
-		if explanation := cleanDisplayText(item.Explanation); explanation != "" {
-			lines = append(lines, "- **Why:** "+explanation)
-		}
-		if quote := cleanDisplayText(item.EvidenceQuote); quote != "" {
-			lines = append(lines, "> **Evidence:** “"+quote+"”")
-		}
-
-		if evidenceURL := strings.TrimSpace(item.EvidenceURL); evidenceURL != "" {
-			parsed, err := url.Parse(evidenceURL)
-			if err == nil && parsed.Host != "" && (parsed.Scheme == "http" || parsed.Scheme == "https") {
-				title := "Open supporting source"
-				for _, source := range item.Sources {
-					if strings.TrimSpace(source.URL) == evidenceURL && cleanDisplayText(source.Title) != "" {
-						title = cleanDisplayText(source.Title)
-						break
-					}
-				}
-				lines = append(lines, "- **Source:** "+title+" — "+parsed.String())
-			}
-		}
-		reports = append(reports, strings.Join(lines, "\n"))
-	}
-	if len(reports) == 0 {
+	if len(verifications) == 0 {
 		return strings.TrimSpace(answer)
 	}
 
-	needsReview := 0
+	counts := map[string]int{}
 	for _, item := range verifications {
-		if !strings.EqualFold(strings.TrimSpace(item.Status), "verified") {
-			needsReview++
+		counts[displayStatus(item.Status)]++
+	}
+	var summary []string
+	for _, status := range []string{"Verified", "Stale", "Unsupported", "Needs review"} {
+		if count := counts[status]; count > 0 {
+			label := strings.ToLower(status)
+			if status == "Needs review" && count > 1 {
+				label = "require review"
+			}
+			summary = append(summary, fmt.Sprintf("%d %s", count, label))
 		}
 	}
-	check := fmt.Sprintf("### ProofPulse freshness review\n\n%d claims checked; %d need review.\n\n%s", len(verifications), needsReview, strings.Join(reports, "\n\n"))
+
+	reports := make([]string, 0, len(verifications))
+	for index, item := range verifications {
+		claim := cleanDisplayText(item.Claim)
+		if claim == "" {
+			claim = "Claim details were not extracted."
+		}
+		status := displayStatus(item.Status)
+		lines := []string{fmt.Sprintf("#### %d. %s", index+1, status), "- **Claim:** " + claim}
+
+		correction := formatCorrection(item.CorrectedClaim)
+		if correction != "" {
+			lines = append(lines, "- **Correction:** "+correction)
+		} else if status == "Stale" || status == "Unsupported" {
+			lines = append(lines, "- **Correction:** The evidence does not establish an exact replacement.")
+		}
+		if explanation := cleanDisplayText(item.Explanation); explanation != "" {
+			lines = append(lines, "- **Reason:** "+explanation)
+		}
+		if quote := cleanDisplayText(item.EvidenceQuote); quote != "" {
+			lines = append(lines, "- **Evidence:** “"+quote+"”")
+		}
+
+		linkedSources := make([]string, 0, 3)
+		seenURLs := map[string]struct{}{}
+		allSourceURLs := map[string]struct{}{}
+		if evidenceURL := strings.TrimSpace(item.EvidenceURL); evidenceURL != "" {
+			title := "Supporting evidence"
+			for _, source := range item.Sources {
+				if strings.TrimSpace(source.URL) == evidenceURL && cleanDisplayText(source.Title) != "" {
+					title = source.Title
+					break
+				}
+			}
+			if link := markdownSourceLink(title, evidenceURL); link != "" {
+				linkedSources = append(linkedSources, link)
+				seenURLs[evidenceURL] = struct{}{}
+				allSourceURLs[evidenceURL] = struct{}{}
+			}
+		}
+		for _, source := range item.Sources {
+			link := markdownSourceLink(source.Title, source.URL)
+			if link == "" {
+				continue
+			}
+			allSourceURLs[source.URL] = struct{}{}
+			if _, exists := seenURLs[source.URL]; exists {
+				continue
+			}
+			if len(linkedSources) >= 3 {
+				continue
+			}
+			linkedSources = append(linkedSources, link)
+			seenURLs[source.URL] = struct{}{}
+		}
+		if len(linkedSources) > 0 {
+			sourceLine := "- **Sources:** " + strings.Join(linkedSources, " · ")
+			if more := len(allSourceURLs) - len(seenURLs); more > 0 {
+				sourceLine += fmt.Sprintf(" · +%d more", more)
+			}
+			lines = append(lines, sourceLine)
+		} else {
+			lines = append(lines, "- **Sources:** No source links were returned for this claim.")
+		}
+		reports = append(reports, strings.Join(lines, "\n"))
+	}
+
+	check := fmt.Sprintf("### ProofPulse freshness check\n\n**Reference date:** %s UTC\n\n**%d claims checked** — %s\n\n%s", time.Now().UTC().Format("2006-01-02"), len(verifications), strings.Join(summary, " · "), strings.Join(reports, "\n\n"))
 	answer = strings.TrimSpace(answer)
 	if answer == "" {
 		return check
 	}
-	return answer + "\n\n---\n\n" + check
+	answerHeading := "### Answer"
+	if answerWasRewritten {
+		answerHeading = "### Evidence-informed answer"
+	} else if counts["Stale"]+counts["Unsupported"]+counts["Needs review"] > 0 {
+		answerHeading = "### Original draft — unverified claims remain"
+	}
+	return check + "\n\n---\n\n" + answerHeading + "\n\n" + answer
 }
+
 func cleanDisplayText(value string) string {
 	value = strings.NewReplacer(
 		"\\\\.", ".", "\\.", ".",
@@ -583,6 +622,51 @@ func cleanDisplayText(value string) string {
 	return strings.Join(strings.Fields(value), " ")
 }
 
+func formatCorrection(value string) string {
+	value = cleanDisplayText(value)
+	if !strings.HasPrefix(value, "|") || !strings.HasSuffix(value, "|") {
+		return value
+	}
+	cells := strings.Split(strings.Trim(value, "|"), "|")
+	cleaned := make([]string, 0, len(cells))
+	for _, cell := range cells {
+		cell = strings.TrimSpace(cell)
+		if cell == "" {
+			continue
+		}
+		cleaned = append(cleaned, cell)
+	}
+	if len(cleaned) < 2 {
+		return value
+	}
+	return strings.Join(cleaned, " — ")
+}
+
+func displayStatus(status string) string {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "verified":
+		return "Verified"
+	case "stale":
+		return "Stale"
+	case "unsupported":
+		return "Unsupported"
+	default:
+		return "Needs review"
+	}
+}
+
+func markdownSourceLink(title, rawURL string) string {
+	parsed, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+		return ""
+	}
+	title = cleanDisplayText(title)
+	if title == "" {
+		title = parsed.Host
+	}
+	title = strings.NewReplacer("\\", "\\\\", "[", "\\[", "]", "\\]").Replace(title)
+	return fmt.Sprintf("[%s](<%s>)", title, parsed.String())
+}
 func setStatus(resp *schemas.HTTPResponse, status string) {
 	if resp.Headers == nil {
 		resp.Headers = make(map[string]string)
